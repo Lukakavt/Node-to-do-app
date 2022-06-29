@@ -1,53 +1,78 @@
-let allTask = JSON.parse(localStorage.getItem("task")) || [];
+let allTask;
 let valueInput = "";
 let input = null;
 let activeEditTask = null;
 
-window.onload = function init() {
+window.onload = async function init() {
   input = document.getElementById("add-task");
   input.addEventListener("change", updateValue);
+  //getting data with API
+  await fetchFunction("allTasks", "GET");
   render();
 };
+//Click button function
+const onClickButton = async () => {
+  if (!(valueInput.trim() === "")) {
+    allTask.push({
+      text: valueInput,
+      isCheck: false,
+    });
+    //Posting API
+    await fetchFunction(
+      "createTask",
+      "POST",
+      { text: valueInput },
+      { isCheck: false }
+    );
+    valueInput = "";
+    input.value = "";
 
-const onClickButton = () => {
-  allTask.push({
-    text: valueInput,
-    isCheck: false,
-  });
-  localStorage.setItem("task", JSON.stringify(allTask));
-  valueInput = "";
-  input.value = "";
-  render();
+    render();
+  }
 };
 
+//enter key function
+const keyEnter = document.getElementById("add-task");
+keyEnter.addEventListener("keydown", function (event) {
+  if (event.key === "Enter") {
+    onClickButton();
+    console.log("test");
+  }
+});
+
+//get value input from inputed Text
 const updateValue = (event) => {
   valueInput = event.target.value;
 };
 
+//rendering
 render = () => {
   const content = document.getElementById("content-page");
   while (content.firstChild) {
     content.removeChild(content.firstChild);
   }
 
+  //sorting Checked and Unchecked paragraph
   allTask.sort((a, b) =>
-    a.isCheck > b.isCheck ? 1 : a.isCheck < b.isCheck ? -1 : 0
+    a.isCheck < b.isCheck ? 1 : a.isCheck > b.isCheck ? -1 : 0
   );
+
   allTask.map((item, index) => {
     const container = document.createElement("div");
-    container.id = `task-${index}`;
+    container.id = `task-${item.id}`;
     container.className = "task-container";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = item.isCheck;
     checkbox.onchange = function () {
-      onChangeCheckbox(index);
+      onChangeCheckbox(item);
     };
     container.appendChild(checkbox);
 
     if (index == activeEditTask) {
       const inputTask = document.createElement("input");
       inputTask.type = "text";
+      inputTask.className = "editing";
       inputTask.value = item.text;
       inputTask.addEventListener("change", updateTaskText);
       inputTask.addEventListener("blur", doneEditTask);
@@ -87,25 +112,64 @@ render = () => {
   });
 };
 
-const onChangeCheckbox = (index) => {
-  allTask[index].isCheck = !allTask[index].isCheck;
-  allTask.splice(index, 1);
+//changing List when isCheck: true
+const onChangeCheckbox = async (item) => {
+  //Patching API
+
+  const { id, isCheck } = item;
+  await fetchFunction("updateTask", "PATCH", { isCheck: !isCheck }, { id });
   render();
 };
 
-const onDeleteTask = (index) => {
-  allTask.splice(index, 1);
-  localStorage.setItem("task", JSON.stringify(allTask));
+//Deleting Task
+const onDeleteTask = async (index) => {
+  let del = allTask[index].id;
+  //Deleting API
+  await fetchFunction(`deleteTask?id=${del}`, "DELETE");
   render();
 };
 
-const updateTaskText = (event) => {
-  allTask[activeEditTask].text = event.target.value;
-  localStorage.setItem("task", JSON.stringify(allTask));
-  render();
+//updating task // patching and saving
+const updateTaskText = async (event) => {
+  if (!(event.target.value.trim() === "")) {
+    const { id } = allTask[activeEditTask];
+    eventValue = event.target.value;
+    //Patching API
+    await fetchFunction("updateTask", "PATCH", { text: eventValue }, { id });
+    render();
+  }
 };
 
+//after done editing task
 const doneEditTask = () => {
   activeEditTask = null;
   render();
+};
+//fetch without body
+const fetchFunction = async (...arg) => {
+  let response;
+  if (arg[2] == null) {
+    response = await fetch(`http://localhost:8000/${arg[0]}`, {
+      method: arg[1],
+      headers: {
+        "Content-Type": "application/json;charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  } else {
+    response = await fetch(`http://localhost:8000/${arg[0]}`, {
+      method: arg[1],
+      headers: {
+        "Content-Type": "application/json;charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+      },
+      body: JSON.stringify({
+        ...arg[2],
+        ...arg[3],
+      }),
+    });
+  }
+
+  const { data } = await response.json();
+  allTask = data;
 };
